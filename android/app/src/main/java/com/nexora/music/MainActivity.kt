@@ -151,7 +151,6 @@ class MainActivity : Activity() {
             hint = "Judul lagu atau nama artis..."
             textSize = 13f
             maxLines = 1
-            singleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setTextColor(white)
             setHintTextColor(muted)
