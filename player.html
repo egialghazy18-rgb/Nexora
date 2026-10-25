@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nexora</title>
+<style>
+  :root{ --bg:#0a0a0a; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --dim:#888; --accent:#3355ff; }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; padding-bottom:120px; }
+  header{ position:sticky; top:0; z-index:10; background:var(--bg); border-bottom:1px solid var(--line); padding:16px; }
+  h1{ font-size:18px; letter-spacing:2px; text-transform:uppercase; display:flex; align-items:center; gap:10px; }
+  h1 b{ color:var(--accent); }
+  .search{ display:flex; gap:8px; margin-top:12px; }
+  .search input{ flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text); padding:12px 14px; border-radius:8px; font-size:14px; outline:none; }
+  .search input:focus{ border-color:var(--accent); }
+  .search button{ background:var(--accent); color:#fff; border:none; padding:0 20px; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; }
+  #list{ padding:12px 16px; }
+  .track{ display:flex; gap:12px; align-items:center; padding:10px; border-radius:8px; cursor:pointer; transition:background .15s; }
+  .track:hover,.track.active{ background:var(--panel); }
+  .track img{ width:56px; height:56px; border-radius:6px; object-fit:cover; flex-shrink:0; background:var(--line); }
+  .track .info{ flex:1; min-width:0; }
+  .track .title{ font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track .artist{ font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .empty{ color:var(--dim); text-align:center; padding:40px 0; font-size:14px; }
+  
+  /* Lyrics Panel */
+  #lyricsBox{ position:fixed; top:0; left:0; right:0; bottom:120px; background:rgba(10,10,10,0.95); z-index:90; display:none; overflow-y:auto; padding:80px 20px 20px; text-align:center; }
+  #lyricsBox.show{ display:block; }
+  .lyric-line{ font-size:16px; color:var(--dim); padding:8px 0; transition:color 0.3s, font-size 0.3s; }
+  .lyric-line.active{ color:var(--accent); font-size:20px; font-weight:700; }
+  #lyricsClose{ position:fixed; top:20px; right:20px; z-index:95; background:var(--line); border:none; color:#fff; padding:8px 12px; border-radius:6px; cursor:pointer; display:none; }
+  #lyricsClose.show{ display:block; }
+
+  #player{ position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid var(--line); padding:12px 16px; display:flex; gap:12px; align-items:center; transform:translateY(100%); transition:transform .25s ease; z-index:100; }
+  #player.show{ transform:translateY(0); }
+  #player img{ width:48px; height:48px; border-radius:6px; object-fit:cover; }
+  #player .meta{ flex:1; min-width:0; cursor:pointer; }
+  #player .title{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #player .artist{ font-size:11px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #player .controls{ display:flex; gap:6px; align-items:center; }
+  #player button{ background:none; border:1px solid var(--line); color:var(--text); width:40px; height:40px; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:16px; }
+  #player button.play{ background:var(--accent); border-color:var(--accent); width:48px; height:48px; font-size:18px; color:#fff; }
+  #progress{ position:absolute; bottom:0; left:0; right:0; height:3px; background:var(--line); }
+  #progressFill{ height:100%; width:0%; background:var(--accent); transition:width .1s linear; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Nexora</h1>
+  <div class="search">
+    <input id="q" type="text" placeholder="Cari lagu..." autocomplete="off"/>
+    <button id="btnSearch">Cari</button>
+  </div>
+</header>
+
+<div id="lyricsBox"></div>
+<button id="lyricsClose">Tutup Lirik</button>
+<div id="list"><div class="empty">Ketik judul lagu, lalu tekan Cari.</div></div>
+
+<div id="player">
+  <img id="pArt" src="" alt="" style="display:none;"/>
+  <div class="meta" id="openLyrics">
+    <div class="title" id="pTitle">—</div>
+    <div class="artist" id="pArtist">—</div>
+  </div>
+  <div class="controls">
+    <button id="btnPrev">⏮</button>
+    <button id="btnPlay" class="play">▶</button>
+    <button id="btnNext">⏭</button>
+  </div>
+  <div id="progress"><div id="progressFill"></div></div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script>
+const API = window.location.origin;
+const audio = document.getElementById("audio");
+const list = document.getElementById("list");
+const player = document.getElementById("player");
+const pTitle = document.getElementById("pTitle");
+const pArtist = document.getElementById("pArtist");
+const btnPlay = document.getElementById("btnPlay");
+const progressFill = document.getElementById("progressFill");
+const lyricsBox = document.getElementById("lyricsBox");
+const lyricsClose = document.getElementById("lyricsClose");
+
+let tracks = [], index = -1;
+let lyricsData = []; // Array of {time, text}
+let lyricsInterval = null;
+
+// ============ MEDIA SESSION ============
+if ("mediaSession" in navigator) {
+  navigator.mediaSession.setActionHandler("play", () => { audio.play(); });
+  navigator.mediaSession.setActionHandler("pause", () => { audio.pause(); });
+  navigator.mediaSession.setActionHandler("previoustrack", () => playIndex(index - 1));
+  navigator.mediaSession.setActionHandler("nexttrack", () => playIndex(index + 1));
+}
+
+// ============ LIRIK (LRCLIB) ============
+async function fetchLyrics(track) {
+  lyricsBox.innerHTML = '<div class="empty">Memuat lirik...</div>';
+  lyricsBox.classList.add("show");
+  lyricsClose.classList.add("show");
+  
+  try {
+    const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(track.title)}&artist_name=${encodeURIComponent(track.artist || '')}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (!data || data.length === 0) {
+      lyricsBox.innerHTML = '<div class="empty">Lirik tidak ditemukan.</div>';
+      return;
+    }
+    
+    // Cari yang punya syncedLyrics, kalau gak ada pakai plainLyrics
+    const best = data.find(d => d.syncedLyrics) || data[0];
+    
+    if (best.syncedLyrics) {
+      parseLRC(best.syncedLyrics);
+    } else if (best.plainLyrics) {
+      lyricsBox.innerHTML = best.plainLyrics.split('\n').map(l => `<div class="lyric-line">${l}</div>`).join('');
+      lyricsData = []; // No sync
+    } else {
+      lyricsBox.innerHTML = '<div class="empty">Lirik tidak tersedia.</div>';
+    }
+  } catch (e) {
+    lyricsBox.innerHTML = '<div class="empty">Gagal memuat lirik.</div>';
+  }
+}
+
+function parseLRC(lrc) {
+  lyricsData = [];
+  const lines = lrc.split('\n');
+  const html = [];
+  
+  lines.forEach(line => {
+    const match = line.match(/^\[(\d{2}):(\d{2}\.\d{2})\](.*)$/);
+    if (match) {
+      const min = parseInt(match[1]);
+      const sec = parseFloat(match[2]);
+      const time = min * 60 + sec;
+      const text = match[3].trim();
+      if (text) {
+        lyricsData.push({ time, text });
+        html.push(`<div class="lyric-line" data-time="${time}">${text}</div>`);
+      }
+    }
+  });
+  
+  lyricsBox.innerHTML = html.join('');
+  startLyricsSync();
+}
+
+function startLyricsSync() {
+  if (lyricsInterval) clearInterval(lyricsInterval);
+  lyricsInterval = setInterval(() => {
+    if (!audio.duration || lyricsData.length === 0) return;
+    const cur = audio.currentTime;
+    
+    // Cari line yang aktif
+    let activeIdx = -1;
+    for (let i = 0; i < lyricsData.length; i++) {
+      if (lyricsData[i].time <= cur) activeIdx = i;
+      else break;
+    }
+    
+    const lines = lyricsBox.querySelectorAll('.lyric-line');
+    lines.forEach((el, i) => {
+      el.classList.toggle('active', i === activeIdx);
+    });
+    
+    // Auto scroll
+    if (activeIdx >= 0 && lines[activeIdx]) {
+      lines[activeIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 200);
+}
+
+// ============ SEARCH ============
+async function doSearch() {
+  const q = document.getElementById("q").value.trim();
+  if (!q) return;
+  list.innerHTML = '<div class="empty">Mencari...</div>';
+  try {
+    const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&limit=25`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || "Gagal");
+    tracks = data.results || [];
+    render();
+  } catch (e) {
+    list.innerHTML = '<div class="empty">Error: ' + e.message + '</div>';
+  }
+}
+
+function render() {
+  if (!tracks.length) return list.innerHTML = '<div class="empty">Tidak ada hasil.</div>';
+  list.innerHTML = "";
+  tracks.forEach((t, i) => {
+    const el = document.createElement("div");
+    el.className = "track"; el.dataset.i = i;
+    el.innerHTML = `
+      <img src="${t.thumbnail || ''}" loading="lazy" alt=""/>
+      <div class="info">
+        <div class="title">${t.title}</div>
+        <div class="artist">${t.artist || 'Unknown'}</div>
+      </div>
+    `;
+    el.addEventListener("click", () => playIndex(i));
+    list.appendChild(el);
+  });
+}
+
+// ============ PLAYBACK (FIX: RETRY & ERROR HANDLING) ============
+function playIndex(i) {
+  if (i < 0 || i >= tracks.length) return;
+  index = i;
+  const t = tracks[i];
+
+  document.querySelectorAll(".track").forEach(el => el.classList.toggle("active", Number(el.dataset.i) === i));
+  document.getElementById("pArt").src = t.thumbnail || "";
+  document.getElementById("pArt").style.display = "block";
+  pTitle.textContent = t.title;
+  pArtist.textContent = t.artist || "Unknown";
+  player.classList.add("show");
+
+  // Reset lirik
+  lyricsBox.classList.remove("show");
+  lyricsClose.classList.remove("show");
+  if (lyricsInterval) clearInterval(lyricsInterval);
+  lyricsData = [];
+
+  // FIX: Tambah timeout & retry
+  audio.src = `${API}/stream/${t.id}`;
+  audio.load();
+  
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.then(() => {
+      btnPlay.textContent = "⏸";
+    }).catch(err => {
+      console.warn("Play ditolak, coba lagi...", err);
+      btnPlay.textContent = "▶";
+      // Coba lagi setelah interaksi user
+      setTimeout(() => {
+        if (audio.paused) {
+          audio.play().then(() => btnPlay.textContent = "⏸").catch(() => {});
+        }
+      }, 500);
+    });
+  }
+
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: t.title, artist: t.artist || "Unknown", album: "Nexora",
+      artwork: t.thumbnail ? [{ src: t.thumbnail, sizes: "320x180", type: "image/jpeg" }] : []
+    });
+  }
+  
+  // Fetch lyrics in background
+  fetchLyrics(t);
+}
+
+// ============ EVENTS ============
+document.getElementById("btnSearch").addEventListener("click", doSearch);
+document.getElementById("q").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+btnPlay.addEventListener("click", () => { audio.paused ? audio.play() : audio.pause(); });
+document.getElementById("btnPrev").addEventListener("click", () => playIndex(index - 1));
+document.getElementById("btnNext").addEventListener("click", () => playIndex(index + 1));
+
+// Buka/Tutup Lirik
+document.getElementById("openLyrics").addEventListener("click", () => {
+  lyricsBox.classList.toggle("show");
+  lyricsClose.classList.toggle("show");
+});
+lyricsClose.addEventListener("click", () => {
+  lyricsBox.classList.remove("show");
+  lyricsClose.classList.remove("show");
+});
+
+audio.addEventListener("play", () => { btnPlay.textContent = "⏸"; });
+audio.addEventListener("pause", () => { btnPlay.textContent = "▶"; });
+audio.addEventListener("ended", () => playIndex(index + 1));
+
+// FIX: Error handling (jika stream mati di tengah jalan)
+audio.addEventListener("error", () => {
+  console.warn("Stream error, mencoba memuat ulang...");
+  setTimeout(() => {
+    if (index >= 0 && !audio.paused) {
+      audio.load();
+      audio.play().catch(() => {});
+    }
+  }, 1000);
+});
+
+audio.addEventListener("timeupdate", () => {
+  if (audio.duration) progressFill.style.width = (audio.currentTime / audio.duration * 100) + "%";
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.bak
+*.campur
+test_audio.m4a
