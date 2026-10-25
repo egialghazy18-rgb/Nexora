@@ -1,6 +1,6 @@
 name: Build Nexora Music APK
 
-on:
+'on':
 workflow_dispatch:
 push:
 branches:
@@ -12,10 +12,9 @@ contents: read
 jobs:
 build:
 runs-on: ubuntu-latest
-
 steps:
-  - name: Checkout source
-    uses: actions/checkout@v4
+- name: Checkout source
+uses: actions/checkout@v4
 
   - name: Setup Java 17
     uses: actions/setup-java@v4
