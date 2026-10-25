@@ -205,7 +205,7 @@ class MainActivity : Activity() {
         content.addView(results)
 
         scroll.addView(content)
-        page.addView(scroll, LinearLayout.LayoutParams(0, 0, 1f))
+        page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // MINI PLAYER
         val player = LinearLayout(this).apply {
