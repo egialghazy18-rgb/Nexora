@@ -27,19 +27,19 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
 
     private val blue = Color.rgb(55, 132, 255)
-    private val background = Color.rgb(8, 11, 18)
+    private val backgroundColorValue = Color.rgb(8, 11, 18)
     private val white = Color.rgb(240, 244, 255)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.statusBarColor = background
-        window.navigationBarColor = background
+        window.statusBarColor = backgroundColorValue
+        window.navigationBarColor = backgroundColorValue
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(22, 24, 22, 12)
-            setBackgroundColor(background)
+            setBackgroundColor(backgroundColorValue)
         }
 
         root.addView(TextView(this).apply {
@@ -60,7 +60,7 @@ class MainActivity : Activity() {
             hint = "Cari lagu atau artis..."
             setHintTextColor(Color.LTGRAY)
             setTextColor(white)
-            singleLine = true
+            setSingleLine(true)
             setPadding(18, 12, 18, 12)
             setBackgroundColor(Color.rgb(25, 31, 45))
         }
