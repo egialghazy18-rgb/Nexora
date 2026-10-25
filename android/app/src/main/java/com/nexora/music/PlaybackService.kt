@@ -1,69 +1,103 @@
 package com.nexora.music
 
 import android.content.Intent
+import android.util.Log
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
 class PlaybackService : MediaSessionService() {
 
-    private var player: ExoPlayer? = null
-    private var mediaSession: MediaSession? = null
+private var player: ExoPlayer? = null
+private var mediaSession: MediaSession? = null
 
-    override fun onCreate() {
-        super.onCreate()
+override fun onCreate() {
+    super.onCreate()
 
-        player = ExoPlayer.Builder(this).build()
+    val exoPlayer = ExoPlayer.Builder(this).build().apply {
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            true
+        )
 
-        mediaSession = MediaSession.Builder(this, player!!)
-            .build()
+        addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e("NexoraPlayback", "Playback error: ${error.errorCodeName}", error)
+            }
+        })
     }
 
-    override fun onGetSession(
-        controllerInfo: MediaSession.ControllerInfo
-    ): MediaSession? = mediaSession
+    player = exoPlayer
+    mediaSession = MediaSession.Builder(this, exoPlayer).build()
+}
 
-    override fun onStartCommand(
-        intent: Intent?,
-        flags: Int,
-        startId: Int
-    ): Int {
-        super.onStartCommand(intent, flags, startId)
+override fun onGetSession(
+    controllerInfo: MediaSession.ControllerInfo
+): MediaSession? = mediaSession
 
-        if (intent?.action == "com.nexora.music.PLAY") {
-            val url = intent.getStringExtra("url")
-            val title = intent.getStringExtra("title") ?: "Nexora Music"
-            val artist = intent.getStringExtra("artist") ?: "Unknown artist"
+override fun onStartCommand(
+    intent: Intent?,
+    flags: Int,
+    startId: Int
+): Int {
+    super.onStartCommand(intent, flags, startId)
 
-            if (!url.isNullOrBlank()) {
-                player?.setMediaItem(
-                    MediaItem.Builder()
-                        .setUri(url)
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(title)
-                                .setArtist(artist)
-                                .build()
-                        )
-                        .build()
-                )
-                player?.prepare()
-                player?.play()
-            }
-        }
-
+    if (intent?.action != "com.nexora.music.PLAY") {
         return START_NOT_STICKY
     }
 
-    override fun onDestroy() {
-        mediaSession?.run {
-            player.release()
-            release()
-        }
-        mediaSession = null
-        player = null
-        super.onDestroy()
+    val url = intent.getStringExtra("url")
+    if (url.isNullOrBlank()) {
+        Log.w("NexoraPlayback", "Play request ignored: empty URL")
+        return START_NOT_STICKY
     }
+
+    val title = intent.getStringExtra("title") ?: "Nexora Music"
+    val artist = intent.getStringExtra("artist") ?: "Unknown artist"
+
+    val exoPlayer = player ?: run {
+        Log.e("NexoraPlayback", "Play request ignored: player unavailable")
+        return START_NOT_STICKY
+    }
+
+    try {
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .build()
+            )
+            .build()
+
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
+        exoPlayer.play()
+    } catch (error: Exception) {
+        Log.e("NexoraPlayback", "Unable to start playback", error)
+    }
+
+    return START_NOT_STICKY
+}
+
+override fun onDestroy() {
+    mediaSession?.release()
+    mediaSession = null
+
+    player?.release()
+    player = null
+
+    super.onDestroy()
+}
+
 }
