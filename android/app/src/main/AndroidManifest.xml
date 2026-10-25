@@ -8,7 +8,7 @@
         android:allowBackup="false"
         android:label="Nexora Music"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

@@ -5,3 +5,9 @@ __pycache__/
 *.bak
 *.campur
 test_audio.m4a
+
+Android build output
+
+.gradle/
+build/
+local.properties
